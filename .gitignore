@@ -4,6 +4,9 @@
 !preprocess/
 !preprocess/**
 
+!PLUX-API-Python3/
+!PLUX-API-Python3/**
+
 !src/
 !src/**
 
