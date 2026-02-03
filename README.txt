@@ -50,7 +50,7 @@ A. Start the local API using Docker Desktop UI:
 B. Start the FACE-API:
     -----------------------
     1. open a new browser tab, start 'Master' in "http://localhost:8082/", enter Session ID and submit session.
-    (2a. Activate 'ecg' environment "conda activate ecg" if you use the FACE laptop.) 
+    (2a. Activate 'face' environment "conda activate face" if you use the FACE laptop.) 
     2. cd to FACE-Pilot dir, open a new terminal and type "python src/face2_api.py <SESSION_EXTERNAL_ID> <GROUP_ARM_ID>".
     NOTE: '0' is for control group, '1' is for FACE group
     3. waiting script running and click 'Start' in the browser.
