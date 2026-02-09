@@ -155,7 +155,7 @@ def main():
             # Clean up recording
             stop_event.set()
             video.join()
-            # ecg.join()
+            ecg.join()
             
             # Notify server device is no longer ready
             requests.put(api_endpoints['device_status'],
