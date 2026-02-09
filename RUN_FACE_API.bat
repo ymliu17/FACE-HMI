@@ -5,7 +5,7 @@ cd /d "%~dp0"
 call "%USERPROFILE%\miniconda3\Scripts\activate.bat" 2>nul || call "%USERPROFILE%\anaconda3\Scripts\activate.bat" 2>nul
 
 :: Activate target environment
-call conda activate ecg
+call conda activate face
 
 echo ==============================
 echo      FACE2 API Launcher
