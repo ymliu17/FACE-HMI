@@ -16,6 +16,7 @@ class FACE_Trainer():
         self.target = kwargs['target']
         self._prepare()
 
+        self.fatigue_threshold = kwargs.get('fatigue_threshold', 2)
         self.best_accuracy = 0.0
 
     def _prepare(self):
@@ -50,7 +51,7 @@ class FACE_Trainer():
             if batch is None:
                 continue
             self.optimizer.zero_grad()
-            if self.target == 'fatigue' or 'focus':
+            if self.target in ('fatigue', 'focus'):
                 loss, target, output = self._forward_model(batch, self.target, True)
             elif self.target == 'rt':
                 loss, target, output = self._forward_model_rt(batch, True)
@@ -78,7 +79,7 @@ class FACE_Trainer():
         outputs = []
         with torch.no_grad():
             for batch in self.test_loader:
-                if self.target == 'fatigue' or 'focus':
+                if self.target in ('fatigue', 'focus'):
                     loss, target, output = self._forward_model(batch, self.target, False)
                 elif self.target == 'rt':
                     loss, target, output = self._forward_model_rt(batch, False)
@@ -188,8 +189,8 @@ class FACE_Trainer():
         return block_loss, np.concatenate(_targets), np.concatenate(_outputs)
     
     def _compute_loss(self, output, target):
-        if self.target == 'fatigue' or 'focus':
-            target = (target > 2).long()
+        if self.target in ('fatigue', 'focus'):
+            target = (target > self.fatigue_threshold).long()
         elif self.target == 'rt':
             target = (target > 2).long()
         else:

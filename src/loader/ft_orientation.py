@@ -7,22 +7,59 @@ from PIL import Image
 from torchvision import transforms
 
 
+def _find_label_path(data_dir, subject):
+    """Try multiple naming conventions to locate the label CSV."""
+    session = f"ses-{subject}_0"
+    candidates = [
+        os.path.join(data_dir, subject, f"{session}_label.csv"),  # canonical
+        os.path.join(data_dir, subject, f"{session}_lable.csv"),  # legacy typo
+        os.path.join(data_dir, subject, f"{subject}_0.csv"),      # bare subject style
+    ]
+    for path in candidates:
+        if os.path.exists(path):
+            return path
+    raise FileNotFoundError(
+        f"No label CSV found for {subject}. Tried:\n" + "\n".join(f"  {p}" for p in candidates)
+    )
+
+
 class OrientationDataset(data.Dataset):
     def __init__(self, data_dir, subject, seq_len=16):
         self.seq_len = seq_len
         self.subject = subject
 
-        label_path = os.path.join(data_dir, subject, f"ses-{subject}_0_lable.csv")
-        self.labels = pd.read_csv(label_path, skipinitialspace=True)
+        label_path = _find_label_path(data_dir, subject)
+        labels = pd.read_csv(label_path, skipinitialspace=True)
         self.block_dir = os.path.join(data_dir, subject, f"ses-{subject}_0")
 
-        # filter to blocks that actually exist on disk
-        self.labels = self.labels[self.labels['block_id'].apply(
+        # keep only numeric block_ids (drop rows like "Pre")
+        labels = labels[pd.to_numeric(labels['block_id'], errors='coerce').notna()].copy()
+        labels['block_id'] = labels['block_id'].astype(int)
+        # drop rows with missing fatigue
+        labels = labels[labels['fatigue'].notna() & (labels['fatigue'].astype(str).str.strip() != '')].copy()
+        labels['fatigue'] = labels['fatigue'].astype(int)
+
+        # try direct match first
+        direct = labels[labels['block_id'].apply(
             lambda bid: os.path.isdir(os.path.join(self.block_dir, f"block-{bid}"))
         )].reset_index(drop=True)
 
+        if len(direct) > 0:
+            self.labels = direct
+        else:
+            # sequential fallback: map Nth CSV row to Nth sorted block dir
+            actual_blocks = sorted(
+                [d for d in os.listdir(self.block_dir)
+                 if d.startswith('block-') and os.path.isdir(os.path.join(self.block_dir, d))],
+                key=lambda x: int(x.split('-')[1])
+            )
+            n = min(len(labels), len(actual_blocks))
+            self.labels = labels.iloc[:n].copy().reset_index(drop=True)
+            self.labels['block_id'] = [int(b.split('-')[1]) for b in actual_blocks[:n]]
+
         print(f"[OrientationDataset] {subject}: {len(self.labels)} blocks, "
-              f"fatigue range {self.labels['fatigue'].min()}-{self.labels['fatigue'].max()}")
+              f"fatigue range {self.labels['fatigue'].min()}-{self.labels['fatigue'].max()} "
+              f"(label: {os.path.basename(label_path)})")
 
     def __len__(self):
         return len(self.labels)

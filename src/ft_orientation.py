@@ -37,6 +37,15 @@ def finetune_subject(subject, args):
 
     log_dir = os.path.join(args.log_dir, f"orientation-{subject}")
 
+    f_labels = train_loader.dataset.labels['fatigue']
+    f_min, f_max = float(f_labels.min()), float(f_labels.max())
+    fatigue_median = float(f_labels.median())
+    # fall back to midpoint when median == max (all values on one side → 0 positives)
+    if fatigue_median >= f_max and f_min < f_max:
+        fatigue_median = (f_min + f_max) / 2
+    print(f"Fatigue label range: {f_min}-{f_max}, threshold: {fatigue_median}"
+          f" -> pos/neg: {int((f_labels > fatigue_median).sum())}/{int((f_labels <= fatigue_median).sum())}")
+
     trainer_config = {
         'model': model,
         'train_loader': train_loader,
@@ -46,6 +55,7 @@ def finetune_subject(subject, args):
         'log_dir': log_dir,
         'target': 'fatigue',
         'epochs': args.epochs,
+        'fatigue_threshold': fatigue_median,
     }
 
     trainer = make_FACE_trainer(**trainer_config)
