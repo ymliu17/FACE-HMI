@@ -1,6 +1,5 @@
 import requests
 import time
-import cv2
 import sys
 import os
 import random
@@ -182,8 +181,8 @@ def main():
                                             n_segments=FATIGUE_N_SEGMENTS, cutoff=FATIGUE_CUTOFF)
 
         if fatigue_flag is None:
-            print("Warning: Could not calculate fatigue flag")
-            continue
+            print("Warning: Could not calculate fatigue flag, defaulting to not fatigued")
+            fatigue_flag = False
 
         print(f"Fatigue status: {fatigue_flag}")
 
@@ -225,13 +224,14 @@ def main():
                    })
         
         time.sleep(1)  # brief pause before next block
-        new_block_info = requests.get(api_endpoints['get_block']).json()
-        block_id = new_block_info["identifier"]
-        block_index = new_block_info["block_ID"]
 
-        # Wait for next block to be ready
-        print("Waiting for next block...")
-        check_game_status(api_endpoints['game_status'])
+        if total_blocks < 20:
+            next_block_info = requests.get(api_endpoints['get_block']).json()
+            api_endpoints['game_status'] = f"{WEBSERVER}/game/checkstatus?sessionId={next_block_info['identifier']}"
+
+            # Wait for next block to be ready
+            print("Waiting for next block...")
+            check_game_status(api_endpoints['game_status'])
 
 
     print("Session complete.")

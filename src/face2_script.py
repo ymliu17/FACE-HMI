@@ -166,7 +166,7 @@ class VideoRecorder(threading.Thread):
         # Sync with ECG start
         if self.start_barrier is not None:
             try:
-                self.start_barrier.wait()
+                self.start_barrier.wait(timeout=5)
             except BrokenBarrierError:
                 print("VideoRecorder: start barrier broken/timed out; continuing.")
         self.start_epoch = time.time()  # optional: store for downstream alignment
@@ -213,7 +213,7 @@ class VideoRecorder(threading.Thread):
                 ret, frame = cap.read()
                 if not ret:
                     print("Warning: Frame capture failed")
-                    continue        
+                    continue
                 out.write(frame)
                 
         finally:
@@ -224,7 +224,7 @@ class VideoRecorder(threading.Thread):
 
 def make_sync_objects():
     """Returns (stop_event, start_barrier)."""
-    return threading.Event(), threading.Barrier(1)
+    return threading.Event(), threading.Barrier(2)
 
 
 def get_faces(block_path, seq_len=16):
