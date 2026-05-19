@@ -27,14 +27,25 @@ GAME_IDENTIFIERS = {
     4: "05561BA9-5DB1-4F15-9C99-8090EACFCB42"   # Delayed Task Switching
 }
 
-def check_game_status(api_url, interval=REQUEST_INTERVAL):
-    """Check if game is ready to start"""
-    while True:
+def check_game_status(api_url, interval=REQUEST_INTERVAL, timeout=120):
+    """Wait until isGameReady is True; returns False on timeout."""
+    deadline = time.time() + timeout
+    while time.time() < deadline:
         response = requests.get(api_url)
-        if response.status_code == 200:
-            if response.json()["isGameReady"]:
-                    return True
+        if response.status_code == 200 and response.json()["isGameReady"]:
+            return True
         time.sleep(interval)
+    return False
+
+def get_new_block(get_block_url, prev_block_id=None, interval=REQUEST_INTERVAL, timeout=60):
+    """Poll get_block until a new block (different identifier) appears."""
+    deadline = time.time() + timeout
+    while time.time() < deadline:
+        info = requests.get(get_block_url).json()
+        if prev_block_id is None or info["identifier"] != prev_block_id:
+            return info
+        time.sleep(interval)
+    raise TimeoutError(f"No new block appeared within {timeout}s")
 
 def parse_subject_id(session_external_id: str) -> str:
     """
@@ -76,17 +87,20 @@ def main():
     
     # State tracking
     consecutive_low_accuracy = False
-    total_blocks = 0 
+    total_blocks = 0
     prev_game_id = None
     current_game_streak = 0
     played_games = set()
-    
+    prev_block_id = None
+    game_levels = {}  # per-game level tracking: {game_id: level}
+
     while total_blocks < 20:
         print("\nStarting new block...")
-        
-        # Get current block information
-        block_info = requests.get(api_endpoints['get_block']).json()
+
+        # Wait for a new block to appear (handles race condition after save_result)
+        block_info = get_new_block(api_endpoints['get_block'], prev_block_id)
         block_id = block_info["identifier"]
+        prev_block_id = block_id
         game_id = block_info["game_FK"]
         block_index = block_info["block_ID"]
         current_level = block_info["startLevel"]
@@ -105,14 +119,21 @@ def main():
         
         # Set up game status URL for this block
         api_endpoints['game_status'] = f"{WEBSERVER}/game/checkstatus?sessionId={block_id}"
-        
-        # Notify server device is ready
-        requests.put(api_endpoints['device_status'], 
-                   json={"isReady": True, "sessionIdentifier": block_id})
 
-        # Wait for game to be ready
+        # Signal device ready and wait for game, retrying the signal every 10s
+        # (game app may not be listening when the first signal arrives)
         print("Waiting for game to be ready...")
-        check_game_status(api_endpoints['game_status'])
+        game_ready = False
+        deadline = time.time() + 120
+        while time.time() < deadline:
+            requests.put(api_endpoints['device_status'],
+                       json={"isReady": True, "sessionIdentifier": block_id})
+            if check_game_status(api_endpoints['game_status'], timeout=10):
+                game_ready = True
+                break
+        if not game_ready:
+            print("Error: timed out waiting for game. Ending session.")
+            break
         print("Game ready - starting recording")
 
         # build shared sync objects
@@ -186,18 +207,18 @@ def main():
 
         print(f"Fatigue status: {fatigue_flag}")
 
-        # Determine next game/level
+        # Determine next game/level (using this game's saved level, or server default on first play)
+        effective_level = game_levels.get(game_id, current_level)
         next_game, next_level, consecutive_low_accuracy = make_decision(
-            block_index, fatigue_flag, accuracy, game_id, current_level, consecutive_low_accuracy, use_rotation=USE_ROTATION
+            block_index, fatigue_flag, accuracy, game_id, effective_level, consecutive_low_accuracy, use_rotation=USE_ROTATION
         )
+        game_levels[game_id] = next_level  # save progression for this game
 
         # game check after 10/15 blocks
         all_games = {1, 2, 3, 4}
         unplayed_games = list(all_games - played_games)
 
-        if current_game_streak < 3:
-            next_game = game_id  # Continue same game if streak < 3 
-        elif 10 <= total_blocks < 15 and len(unplayed_games) >= 2:
+        if 10 <= total_blocks < 15 and len(unplayed_games) >= 2:
             # after 10 blocks
             next_game = random.choice(unplayed_games)
         elif total_blocks >= 15 and len(unplayed_games) >= 1:
@@ -211,27 +232,27 @@ def main():
         #         next_game = random.choice(unplayed_games)
         #     else:
         #         next_game = game_id
-        
+
+        # use next_game's saved level if it has been played before, else server's startLevel
+        send_level = game_levels.get(next_game, current_level)
+
         next_game_id = GAME_IDENTIFIERS[next_game]
-        print(f"Next: Game {next_game_id}, Level {next_level}")
-        
+        print(f"Next: Game {next_game_id}, Level {send_level}")
+
         # Save decision
         requests.put(api_endpoints['save_result'],
                    json={
                        "NextGameIdentifier": next_game_id,
-                       "NextLevel": next_level,
+                       "NextLevel": send_level,
                        "BlockIdentifier": block_id
                    })
-        
+
+        # Signal device ready immediately after save_result so the new game app
+        # finds isDeviceReady=True when it initializes (it only polls once at startup)
+        requests.put(api_endpoints['device_status'],
+                   json={"isReady": True, "sessionIdentifier": block_id})
+
         time.sleep(1)  # brief pause before next block
-
-        if total_blocks < 20:
-            next_block_info = requests.get(api_endpoints['get_block']).json()
-            api_endpoints['game_status'] = f"{WEBSERVER}/game/checkstatus?sessionId={next_block_info['identifier']}"
-
-            # Wait for next block to be ready
-            print("Waiting for next block...")
-            check_game_status(api_endpoints['game_status'])
 
 
     print("Session complete.")

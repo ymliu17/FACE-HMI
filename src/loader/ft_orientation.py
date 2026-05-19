@@ -57,6 +57,18 @@ class OrientationDataset(data.Dataset):
             self.labels = labels.iloc[:n].copy().reset_index(drop=True)
             self.labels['block_id'] = [int(b.split('-')[1]) for b in actual_blocks[:n]]
 
+        # drop blocks whose directory contains no face images
+        has_faces = self.labels['block_id'].apply(
+            lambda bid: any(
+                f.lower().endswith('.jpg')
+                for f in os.listdir(os.path.join(self.block_dir, f"block-{bid}"))
+            ) if os.path.isdir(os.path.join(self.block_dir, f"block-{bid}")) else False
+        )
+        skipped = (~has_faces).sum()
+        if skipped:
+            print(f"[OrientationDataset] {subject}: skipping {skipped} block(s) with no face images")
+        self.labels = self.labels[has_faces].reset_index(drop=True)
+
         print(f"[OrientationDataset] {subject}: {len(self.labels)} blocks, "
               f"fatigue range {self.labels['fatigue'].min()}-{self.labels['fatigue'].max()} "
               f"(label: {os.path.basename(label_path)})")
