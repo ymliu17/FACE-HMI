@@ -594,10 +594,10 @@ def evaluate_accuracy(accuracy, game):
     else:
         return False
 
-def make_decision(block, fatigue, accuracy, game, level, conseccutive_low_accuracy, use_rotation=True):
-    
+def make_decision(game_streak, fatigue, accuracy, game, level, conseccutive_low_accuracy, use_rotation=True):
+
     acc = evaluate_accuracy(accuracy, game)
-    
+
     # automatic game rotation
     if use_rotation:
         new_level = single_block_change(fatigue, acc, level)
@@ -607,18 +607,18 @@ def make_decision(block, fatigue, accuracy, game, level, conseccutive_low_accura
             conseccutive_low_accuracy = True
         else:
             conseccutive_low_accuracy = False
-        
-        new_game = three_blocks_change(fatigue, acc) if block % 3 == 0 else game
-    
+
+        new_game = three_blocks_change(fatigue, acc) if game_streak >= 3 else game
+
     else:
         new_level = single_block_increase(acc, level)
         if not acc:
             if conseccutive_low_accuracy:
                 new_level = two_blocks_change(new_level)
             conseccutive_low_accuracy = True
-        else:   
+        else:
             conseccutive_low_accuracy = False
-        
-        new_game = game % 4 + 1 if block % 5 == 0 else game
+
+        new_game = game % 4 + 1 if game_streak >= 5 else game
 
     return new_game, new_level, conseccutive_low_accuracy

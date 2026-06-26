@@ -17,20 +17,25 @@ class FACE_Trainer():
         self._prepare()
 
         self.fatigue_threshold = kwargs.get('fatigue_threshold', 2)
+        # metric used to decide which epoch's model to keep ('accuracy', 'f1', ...)
+        self.select_metric = kwargs.get('select_metric', 'accuracy')
+        self.best_score = 0.0
         self.best_accuracy = 0.0
 
     def _prepare(self):
         # prepare the model, optimizer, train_loader, and test_loader
         self.accelerator = Accelerator()
         self.device = self.accelerator.device
-        self.model = self.accelerator.prepare(self.model)
-        self.optimizer = self.accelerator.prepare(self.optimizer)
         self.model, self.optimizer, self.train_loader, self.test_loader = self.accelerator.prepare(
-            self.model, 
-            self.optimizer, 
+            self.model,
+            self.optimizer,
             self.train_loader,
             self.test_loader
         )
+        # accelerate doesn't reliably move the model onto MPS (Apple GPU);
+        # inputs/hidden state are placed on self.device explicitly during the
+        # forward pass, so pin the model there too to avoid a device mismatch.
+        self.model = self.model.to(self.device)
         self._make_log_dir()
     
     def _make_log_dir(self):
@@ -62,7 +67,7 @@ class FACE_Trainer():
             targets.append(target)
             outputs.append(output)
         
-        metrics_results = self._calculate_metrics(targets, outputs)
+        metrics_results = self._calculate_metrics(outputs, targets)
 
         logs = self._make_log(
             epoch = epoch,
@@ -89,7 +94,7 @@ class FACE_Trainer():
                 targets.append(target)
                 outputs.append(output)
         
-        metrics_results = self._calculate_metrics(targets, outputs)
+        metrics_results = self._calculate_metrics(outputs, targets)
 
         logs = self._make_log(
             epoch = epoch,
@@ -98,7 +103,9 @@ class FACE_Trainer():
             **metrics_results
         )
         print(logs)
-        if metrics_results['accuracy'] > self.best_accuracy:
+        score = metrics_results[self.select_metric]
+        if score > self.best_score:
+            self.best_score = score
             self.best_accuracy = metrics_results['accuracy']
             self._save_best_results(targets, outputs)
 

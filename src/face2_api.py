@@ -210,7 +210,7 @@ def main():
         # Determine next game/level (using this game's saved level, or server default on first play)
         effective_level = game_levels.get(game_id, current_level)
         next_game, next_level, consecutive_low_accuracy = make_decision(
-            block_index, fatigue_flag, accuracy, game_id, effective_level, consecutive_low_accuracy, use_rotation=USE_ROTATION
+            current_game_streak, fatigue_flag, accuracy, game_id, effective_level, consecutive_low_accuracy, use_rotation=USE_ROTATION
         )
         game_levels[game_id] = next_level  # save progression for this game
 
