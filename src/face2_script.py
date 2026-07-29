@@ -466,7 +466,7 @@ def get_block_fatigue_4x(input_path, face_outdir, model_dir, n_segments=4, cutof
     return fatigued
 
 
-def single_block_change(fatigue, accuracy, level): 
+def single_block_change(fatigue, accuracy, level, allow_novelty=True):
     """
     x = novelty (hundreds digit)
     y = difficulty / staircase (tens digit)
@@ -477,8 +477,12 @@ def single_block_change(fatigue, accuracy, level):
       Acc=High,  Tired=False -> increase y
       Acc=Low,   Tired=True  -> change x (random)
       Acc=Low,   Tired=False -> change neither
+
+    allow_novelty: when False, suppress the random novelty (x) change. Used on a
+    game's entry block (streak==1), where a novelty-carrying 3-digit level is
+    mishandled downstream and manifests as a spurious difficulty jump.
     """
-    # ensure level is an integer  
+    # ensure level is an integer
     if not isinstance(level, int):
         try:
             level = int(level)  # Convert to integer if possible
@@ -492,8 +496,9 @@ def single_block_change(fatigue, accuracy, level):
 
     if accuracy and fatigue:
         # High acc + tired: change x AND increase y
-        staircase = min(9, staircase + 1) 
-        novelty = random.choice([x for x in range(10) if x != novelty])
+        staircase = min(9, staircase + 1)
+        if allow_novelty:
+            novelty = random.choice([x for x in range(10) if x != novelty])
 
     elif accuracy and not fatigue:
         # High acc + not tired: increase y only
@@ -501,18 +506,19 @@ def single_block_change(fatigue, accuracy, level):
 
     elif (not accuracy) and fatigue:
         # Low acc + tired: change x only
-        novelty = random.choice([x for x in range(10) if x != novelty])
+        if allow_novelty:
+            novelty = random.choice([x for x in range(10) if x != novelty])
     elif (not accuracy) and (not fatigue):
         # Low acc + not tired: change neither
         pass
 
     else:
         raise ValueError("Invalid input")
-    
+
     new_level = novelty * 100 + staircase * 10 + z
     return new_level
 
-def single_block_increase(accuracy, level):
+def single_block_increase(accuracy, level, allow_novelty=True):
     """
     x = novelty (hundreds digit)
     y = difficulty / staircase (tens digit)
@@ -522,8 +528,10 @@ def single_block_increase(accuracy, level):
       Acc=High -> increase y
       Acc=Low ->  change x only
 
+    allow_novelty: when False, suppress the random novelty (x) change on a game's
+    entry block (streak==1); a low-acc entry block then changes neither.
     """
-    # ensure level is an integer  
+    # ensure level is an integer
     if not isinstance(level, int):
         try:
             level = int(level)  # Convert to integer if possible
@@ -540,8 +548,9 @@ def single_block_increase(accuracy, level):
         staircase = min(9, staircase + 1)
     else:
         # Low acc: change x only
-        novelty = random.choice([x for x in range(10) if x != novelty])
-    
+        if allow_novelty:
+            novelty = random.choice([x for x in range(10) if x != novelty])
+
     new_level = novelty * 100 + staircase * 10 + z
     return new_level
 
@@ -598,9 +607,13 @@ def make_decision(game_streak, fatigue, accuracy, game, level, conseccutive_low_
 
     acc = evaluate_accuracy(accuracy, game)
 
+    # On a game's entry block (streak==1) suppress novelty changes: a novelty-carrying
+    # 3-digit level is mishandled at the switch handoff and shows up as a difficulty jump.
+    allow_novelty = game_streak > 1
+
     # automatic game rotation
     if use_rotation:
-        new_level = single_block_change(fatigue, acc, level)
+        new_level = single_block_change(fatigue, acc, level, allow_novelty=allow_novelty)
         if not acc:
             if conseccutive_low_accuracy:
                 new_level = two_blocks_change(new_level)
@@ -611,7 +624,7 @@ def make_decision(game_streak, fatigue, accuracy, game, level, conseccutive_low_
         new_game = three_blocks_change(fatigue, acc) if game_streak >= 3 else game
 
     else:
-        new_level = single_block_increase(acc, level)
+        new_level = single_block_increase(acc, level, allow_novelty=allow_novelty)
         if not acc:
             if conseccutive_low_accuracy:
                 new_level = two_blocks_change(new_level)
