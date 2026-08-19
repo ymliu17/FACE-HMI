@@ -10,7 +10,7 @@
 !src/
 !src/**
 
-!README.txt
+!README.md
 !README_Docker.txt
 !requirement.txt
 !RUN_FACE_API.bat
