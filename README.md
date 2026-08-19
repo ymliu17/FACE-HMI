@@ -1,22 +1,28 @@
 # FACE-HMI
 
-Adaptive brain-wellness game controller for the **FACE** study (R21). The controller
-sits between the Brain Wellness Games web app and the participant, recording facial
-video (and optionally ECG) during each game block, estimating **fatigue** from the
-video with a fine-tuned deep model, and using accuracy + fatigue to decide the next
-game and difficulty level.
+Adaptive brain-wellness game controller for the **FACE** study — the
+facial-expression-based personalization engine (FPE) used in the
+**FACE Phase II trial** ([NCT07130669](https://clinicaltrials.gov/study/NCT07130669)).
+The controller sits between the Brain Wellness Games web app and the participant,
+recording facial video (and optionally ECG) during each game block, estimating
+**fatigue** from the video with a fine-tuned deep model, and using accuracy +
+fatigue to decide the next game and difficulty level.
 
-The study has two arms:
+The trial randomizes participants to two arms, which the controller selects with its
+`GROUP_ARM_ID` argument:
 
-- **FACE group** (`GROUP_ARM_ID = 1`) — difficulty, novelty, and game switching adapt
-  to **both** task accuracy and model-derived fatigue.
-- **Control group** (`GROUP_ARM_ID = 0`) — adaptation uses **accuracy only**; fatigue
-  is ignored and games advance on a fixed rotation.
+- **FACE group** (`GROUP_ARM_ID = 1`) — registered as *unsupervised cognitive training
+  **with** personalized engine* (experimental). Difficulty, novelty, and game
+  switching adapt to **both** task accuracy and model-derived fatigue.
+- **Control group** (`GROUP_ARM_ID = 0`) — registered as *unsupervised cognitive
+  training **without** personalized engine* (active comparator). Adaptation uses
+  **accuracy only**; fatigue is ignored and games advance on a fixed rotation.
 
 ---
 
 ## Table of contents
 
+- [Study](#study)
 - [How it works](#how-it-works)
 - [Adaptive decision logic](#adaptive-decision-logic)
 - [Fatigue estimation](#fatigue-estimation)
@@ -31,6 +37,22 @@ The study has two arms:
 - [Fine-tuning per subject](#fine-tuning-per-subject)
 
 ---
+
+## Study
+
+| | |
+|---|---|
+| Registration | [NCT07130669](https://clinicaltrials.gov/study/NCT07130669) — *FACE Phase II (a Stage II Trial)* |
+| Full title | A Facial Expression-based Personalization Engine (FPE) for Monitoring and Modulating Real-time Effective Engagement in Cognitive Training in Older Adults at Risk for AD/ADRD |
+| Sponsor / PI | Stanford University — Feng Lin |
+| Design | Interventional, randomized, parallel, double-masked (participant + investigator) |
+| Enrollment | 80 (estimated) |
+| Population | Subjective cognitive decline (SCD), MCI, mild behavioral impairment |
+| Intervention | 6-week unsupervised computerized cognitive training |
+| Status | Recruiting; started 2025-10-31, estimated completion 2028-08-31 |
+
+Registry details above are as of the 2026-04-24 record update. Earlier-phase (R21)
+pilot data also lives in this repo under `Pilot/`.
 
 ## How it works
 
