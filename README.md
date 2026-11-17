@@ -33,6 +33,7 @@ The trial randomizes participants to two arms, which the controller selects with
   - [Online](#online-azure)
   - [Local](#local-docker)
 - [Recorded output](#recorded-output)
+- [Fatigue monitor](#fatigue-monitor)
 - [Fatigue models](#fatigue-models)
 - [Fine-tuning per subject](#fine-tuning-per-subject)
 
@@ -150,17 +151,30 @@ one).
 
 `get_block_fatigue_4x` ([`src/face2_script.py:415`](src/face2_script.py#L415)):
 
-1. Runs RetinaFace over the block video and saves one face crop every **5 s** as
-   `<second>.jpg` (`extract_frames`).
-2. Splits the block into `n_segments` (default 4) equal time windows.
-3. For each segment, samples a 16-frame sequence of crops (resized to 112×112) and
+1. Splits the block video into `n_segments` (default 4) consecutive windows.
+2. Uniformly selects **16 video frames per window**, in chronological order, and
+   runs RetinaFace on those frames. Saves only the selected crops, at their
+   original resolution without labels, as lossless PNGs under
+   `frame_sets/set-01/01.png` through `frame_sets/set-04/16.png`.
+3. Reads these exact saved sequences, resizes them to 112×112, and
    runs the recurrent model, taking `argmax` → 0 or 1 (`infer_score_on_faces`).
 4. Sums the per-segment predictions and compares to `cutoff` (default 1) — so with
    the defaults, **any** segment predicting fatigue marks the block as fatigued.
 
-Segments with no usable crops are skipped. If no segment yields a prediction the
+Only a window containing fewer than 16 video frames repeats its last frame to
+reach 16 inputs. The old every-5-second extraction pass is no longer used by this
+function. This changes the sampling cadence, so predictions can differ from the
+previous version. As before, an invalid/missing face detection falls back to the
+full camera frame; the manifest records this with `crop_box: null`.
+
+Empty windows are skipped. If no segment yields a prediction the
 function returns `None`, and the session driver defaults that block to **not
 fatigued**.
+
+`frame_sets/manifest.json` records each input's sequence position (filename), video
+frame index, timestamp, crop box and original size, plus segment predictions and
+the block result. Directory input can replay these saved sequences; legacy
+directories containing `<second>.jpg` files remain readable with the old sampler.
 
 `get_block_fatigue` (single-window variant) is retained but unused by the driver.
 
@@ -220,8 +234,9 @@ The capture backend is chosen per platform (AVFoundation / DirectShow / V4L2).
 Command form:
 
 ```bash
-python src/face2_api.py <SESSION_EXTERNAL_ID> <GROUP_ARM_ID>
+python src/face2_api.py <SESSION_EXTERNAL_ID> <GROUP_ARM_ID> [monitor]
 # GROUP_ARM_ID: 0 = control group, 1 = FACE group
+# Add the literal word monitor to enable the visualization window.
 ```
 
 `SESSION_EXTERNAL_ID` must use the format `subidx_sesidx` (e.g. `FT19_2`) — the
@@ -255,6 +270,48 @@ On Windows, [`RUN_FACE_API.bat`](RUN_FACE_API.bat) wraps the run command.
 Run from the **repo root** — model paths and the `Pilot/` output directory are
 resolved relative to the working directory.
 
+## Fatigue monitor
+
+Monitoring is **off by default**. Add `monitor` as the third argument to open the
+window when the first completed block starts fatigue processing:
+
+```bash
+python src/face2_api.py FT19_2 1 monitor
+```
+
+Without `monitor`, recording, frame saving, model inference and game decisions
+still run normally, with no monitoring window or temporary monitor snapshots.
+
+Monitoring is implemented in the separate `fatigue_monitor.py` module and enabled
+by the session driver. API endpoints, request payloads, fatigue function signatures/
+return types, and decision rules are unchanged. `face2_monitor.py` remains a
+compatibility shortcut that explicitly supplies `monitor` to the same driver;
+only one entry point needs to run.
+
+After each block, the window updates as each time segment finishes inference:
+
+- Each frame set shows the **exact 16 frames supplied to the model**, in model
+  order, including any repeated frames used to pad a short sequence.
+- The set's prediction (`Fatigue: 0` or `Fatigue: 1`) is printed over its frames.
+  This is one prediction for the entire sequence, not individual frame predictions
+  or a confidence/probability score.
+- The block summary shows the final fatigue flag, number of positive/valid sets,
+  and configured cutoff. Missing sets are marked unavailable; a block with no
+  predictions remains **Unavailable** in the monitor even though the existing
+  controller falls back to not fatigued for its decision.
+
+The latest block remains visible while the next game runs, then is replaced when
+the next block starts processing. Scrollbars allow viewing all frame sets. The
+viewer runs in a separate process: closing it or a display failure does not stop
+recording, inference, or API calls. If closed, it reopens when the next completed
+block starts processing. It closes when the session driver exits.
+
+The viewer requires **Tkinter** and the existing **Pillow** dependency in the same
+Python environment as FACE HMI. `python -m tkinter` can check Tk availability.
+Monitor snapshots are local temporary files, removed when the monitored session
+exits; original face crops are never annotated on disk. No web service or port is
+added. The monitor supports the driver's `get_block_fatigue_4x` inference path.
+
 ## Recorded output
 
 Per session, under `Pilot/ses-<SESSION_EXTERNAL_ID>/`, where `<n>` is the
@@ -263,8 +320,18 @@ server-assigned `block_ID` (not a 1-based counter):
 ```
 block-<n>.mp4            # facial video for block n
 block-<n>/ecg_raw.csv    # ECG samples for block n (only if PLUX connected)
-block-<n>/<sec>.jpg      # face crops extracted for fatigue inference
+block-<n>/frame_sets/set-01/01.png ... 16.png  # segment 1: original-resolution crops
+block-<n>/frame_sets/set-02/01.png ... 16.png  # segment 2
+block-<n>/frame_sets/set-03/01.png ... 16.png  # segment 3
+block-<n>/frame_sets/set-04/01.png ... 16.png  # segment 4
+block-<n>/frame_sets/manifest.json           # source frames, crop metadata and predictions
 ```
+
+For a normal block, four sets contain 64 saved input images. Model resizing and
+monitor labels do not modify these originals. Reprocessing replaces only the
+generated `frame_sets` directory after successful extraction. Previously saved
+top-level JPGs and ECG data are preserved; video inference does not read those old
+JPGs or create a new every-5-second image collection.
 
 ## Fatigue models
 

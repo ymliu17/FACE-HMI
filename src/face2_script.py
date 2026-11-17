@@ -11,6 +11,8 @@ import csv
 from threading import BrokenBarrierError
 from uniface import RetinaFace
 from torchvision import transforms
+from fatigue_monitor import publish as _publish_fatigue_monitor
+from face_frame_sets import extract_frame_sets, read_frame_sets, save_predictions
 
 # Camera settings
 CAM_INDEX = 0
@@ -297,6 +299,16 @@ def get_faces_segment(block_path, seq_len=16, start_sec=None, end_sec=None):
     faces = torch.stack(faces)
     return faces    
 
+def _load_saved_frame_set(face_outdir, segment):
+    """Read the saved originals in their recorded model-input order."""
+    faces = []
+    for record in segment["frames"]:
+        path = os.path.join(face_outdir, "frame_sets", record["file"])
+        with Image.open(path) as original:
+            face = transforms.ToTensor()(original.convert("RGB"))
+        faces.append(transforms.Resize((112, 112), antialias=True)(face))
+    return torch.stack(faces) if faces else None
+
 def detect_face(frame, face_path, detector):
     faces = detector.detect(frame)
 
@@ -417,20 +429,19 @@ def get_block_fatigue_4x(input_path, face_outdir, model_dir, n_segments=4, cutof
     Get block fatigue by segmenting the video into n_segments,
     inferring fatigue on each segment, and summing the scores.
     """
-    # Extract faces from video
+    if n_segments < 1:
+        raise ValueError("n_segments must be positive")
+    _publish_fatigue_monitor("begin", face_outdir=face_outdir, model_dir=model_dir,
+                             n_segments=n_segments, cutoff=cutoff)
+    # Select directly from the video; save only the exact input sequences.
     if input_path.endswith('.mp4'):
-        cap = cv2.VideoCapture(input_path)
-        fps = cap.get(cv2.CAP_PROP_FPS)
-        total_frames = cap.get(cv2.CAP_PROP_FRAME_COUNT)
-        cap.release()
-        block_duration = int(total_frames / fps) if fps >0 and total_frames >0 else 120
-        frame_count = 0
-        # Initialize the face detector
         detector = RetinaFace(gpu_id=0 if torch.cuda.is_available() else -1)
-        os.makedirs(face_outdir, exist_ok=True)
-        extract_frames(input_path, face_outdir, frame_count, detector)
+        frame_sets = extract_frame_sets(input_path, face_outdir, detector,
+                                       n_segments=n_segments, seq_len=16)
     else:
-        block_duration = 120  # default duration if not video
+        frame_sets = read_frame_sets(face_outdir)
+    if frame_sets is not None and frame_sets["n_segments"] != n_segments:
+        raise ValueError("Saved frame sets use a different n_segments; rerun with the source video")
 
     # Load model
     ckpt = torch.load(model_dir, map_location=torch.device('cpu'), weights_only=False)
@@ -440,29 +451,46 @@ def get_block_fatigue_4x(input_path, face_outdir, model_dir, n_segments=4, cutof
     model.to(device)
 
     # Infer fatigue on each segment
-    seg_len = max(1, block_duration // n_segments)
+    seg_len = max(1, 120 // n_segments)  # Compatibility for legacy JPG directories.
     preds = []
 
     for i in range(n_segments):
-        start = i * seg_len
-        end = block_duration if i == n_segments - 1 else (i + 1) * seg_len
-
-        faces = get_faces_segment(face_outdir, seq_len=16, start_sec=start, end_sec=end)
+        if frame_sets is not None:
+            segment = frame_sets["segments"][i]
+            start, end = segment["start"], segment["end"]
+            segment["prediction"] = None
+            faces = _load_saved_frame_set(face_outdir, segment)
+        else:
+            start = i * seg_len
+            end = 120 if i == n_segments - 1 else (i + 1) * seg_len
+            faces = get_faces_segment(face_outdir, seq_len=16, start_sec=start, end_sec=end)
         if faces is None:
             print(f"No faces for segment {i} [{start}, {end})")
+            _publish_fatigue_monitor("segment", index=i, start=start, end=end,
+                                     faces=None, prediction=None)
             continue
 
         pred = infer_score_on_faces(model, device, faces)
+        if frame_sets is not None:
+            segment["prediction"] = pred
         preds.append(pred)
         print(f"Segment {i} [{start}-{end}] -> {pred}")
+        _publish_fatigue_monitor("segment", index=i, start=start, end=end,
+                                 faces=faces, prediction=pred)
 
     if not preds:
         print("No valid segments for this block.")
+        if frame_sets is not None:
+            save_predictions(face_outdir, frame_sets, model_dir, cutoff, None)
+        _publish_fatigue_monitor("end", fatigued=None)
         return None
 
     sum_score = sum(preds)
     fatigued = sum_score >= cutoff
+    if frame_sets is not None:
+        save_predictions(face_outdir, frame_sets, model_dir, cutoff, fatigued)
     print(f"Segment preds={preds}, sum={sum_score}, fatigued={fatigued} (cutoff={cutoff})")
+    _publish_fatigue_monitor("end", fatigued=fatigued)
     return fatigued
 
 

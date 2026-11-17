@@ -5,11 +5,13 @@ import os
 import random
 from face2_script import get_block_fatigue, get_block_fatigue_4x, make_decision
 from face2_script import VideoRecorder, ECGRecorder, make_sync_objects
+from fatigue_monitor import enabled_monitor
 
 # Configuration
 REQUEST_INTERVAL = 0.5  # seconds between API checks
 SESSION_EXTERNAL_ID = sys.argv[1]  # Get session ID from command line
 GROUP_ARM_ID = sys.argv[2]  # 0 for control group, 1 for FACE group
+MONITOR_ENABLED = sys.argv[3:] == ["monitor"]  # Optional third argument; off by default
 USE_ROTATION = GROUP_ARM_ID in ("1","true","True","t","yes","y")
 FATIGUE_N_SEGMENTS = 4  # number of segments to split video into for fatigue analysis
 FATIGUE_CUTOFF = 1  # fatigue score threshold
@@ -69,6 +71,14 @@ def select_model_for_subject(subject_id: str, model_dir: str = MODEL_DIR, defaul
     return default_model
 
 def main():
+    if MONITOR_ENABLED:
+        with enabled_monitor(SESSION_EXTERNAL_ID):
+            _run_session()
+    else:
+        _run_session()
+
+
+def _run_session():
     print(f"Starting session: {SESSION_EXTERNAL_ID}")
     
     # Initialize session
