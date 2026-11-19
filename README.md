@@ -24,7 +24,7 @@ The trial randomizes participants to two arms, which the controller selects with
 
 [![FACE HMI demonstration at 4× speed](docs/media/FE-HMI-4x.gif)](https://github.com/ymliu17/FACE-HMI/raw/refs/heads/main/docs/media/FE-HMI-4x.mp4)
 
-Click the animated preview to watch the [full-resolution MP4](https://github.com/ymliu17/FACE-HMI/raw/refs/heads/main/docs/media/FE-HMI-4x.mp4).
+Click the animated preview to download the [full-resolution MP4](https://github.com/ymliu17/FACE-HMI/raw/refs/heads/main/docs/media/FE-HMI-4x.mp4).
 
 ---
 
