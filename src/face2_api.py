@@ -6,12 +6,18 @@ import random
 from face2_script import get_block_fatigue, get_block_fatigue_4x, make_decision
 from face2_script import VideoRecorder, ECGRecorder, make_sync_objects
 from fatigue_monitor import enabled_monitor
+from face2_script import evaluate_accuracy
+from reachy_feedback import give_block_feedback, start_local_daemon
 
 # Configuration
 REQUEST_INTERVAL = 0.5  # seconds between API checks
 SESSION_EXTERNAL_ID = sys.argv[1]  # Get session ID from command line
 GROUP_ARM_ID = sys.argv[2]  # 0 for control group, 1 for FACE group
-MONITOR_ENABLED = sys.argv[3:] == ["monitor"]  # Optional third argument; off by default
+RUN_OPTIONS = set(sys.argv[3:])
+if RUN_OPTIONS - {"monitor", "reachy"}:
+    raise SystemExit("Usage: face2_api.py SESSION_ID GROUP_ARM_ID [monitor] [reachy]")
+MONITOR_ENABLED = "monitor" in RUN_OPTIONS
+REACHY_ENABLED = "reachy" in RUN_OPTIONS
 USE_ROTATION = GROUP_ARM_ID in ("1","true","True","t","yes","y")
 FATIGUE_N_SEGMENTS = 4  # number of segments to split video into for fatigue analysis
 FATIGUE_CUTOFF = 1  # fatigue score threshold
@@ -87,6 +93,8 @@ def _run_session():
     session_id = session_info["identifier"]
     print(f"Session ID: {session_id}")
     
+    reachy_ready = REACHY_ENABLED and start_local_daemon(os.path.join("Pilot", f"ses-{session_id}"))
+
     # API endpoints
     api_endpoints = {
         'device_status': f"{WEBSERVER}/device/UpdateStatus",
@@ -211,6 +219,7 @@ def _run_session():
                                             model_dir=model_path,
                                             n_segments=FATIGUE_N_SEGMENTS, cutoff=FATIGUE_CUTOFF)
 
+        fatigue_prediction = fatigue_flag  # Preserve unavailable results for feedback.
         if fatigue_flag is None:
             print("Warning: Could not calculate fatigue flag, defaulting to not fatigued")
             fatigue_flag = False
@@ -248,6 +257,18 @@ def _run_session():
 
         next_game_id = GAME_IDENTIFIERS[next_game]
         print(f"Next: Game {next_game_id}, Level {send_level}")
+
+        # Keep isReady=False throughout feedback. SaveExtendedResult may create
+        # the next block, so speak before that request and keep save->ready adjacent.
+        if reachy_ready:
+            give_block_feedback(
+                output_dir, accuracy=accuracy,
+                accuracy_high=evaluate_accuracy(accuracy, game_id),
+                fatigue=fatigue_prediction if USE_ROTATION else None,
+                current_game=game_id, current_level=current_level,
+                next_game=next_game, next_level=send_level,
+                final_block=total_blocks >= 20,
+            )
 
         # Save decision
         requests.put(api_endpoints['save_result'],

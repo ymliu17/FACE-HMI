@@ -1,0 +1,8 @@
+# Optional local USB feedback; install into the existing FACE environment (Python 3.11+).
+reachy-mini==1.11.0
+pyttsx3==2.99
+soundfile==0.13.1
+scipy>=1.15,<2
+numpy>=2.2.5,<3
+# Torch and NeuroKit in the FACE environment require this upper bound.
+setuptools<82

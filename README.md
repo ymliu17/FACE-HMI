@@ -206,8 +206,8 @@ directories containing `<second>.jpg` files remain readable with the old sampler
 | [`src/face2_script.py`](src/face2_script.py) | Recorders, fatigue inference, decision logic |
 | [`src/face_frame_sets.py`](src/face_frame_sets.py) | Select and save the exact frames used for inference |
 | [`src/fatigue_monitor.py`](src/fatigue_monitor.py) | Optional prediction window and its separate viewer process |
-| `src/reachy_feedback.py` | Optional USB robot feedback, official emotions and sound/voice mixing |
-| `src/requirements-reachy.txt` | Optional robot dependencies for the existing FACE environment |
+| [`src/reachy_feedback.py`](src/reachy_feedback.py) | Optional USB robot feedback, official emotions and sound/voice mixing |
+| [`src/requirements-reachy.txt`](src/requirements-reachy.txt) | Optional robot dependencies for the existing FACE environment |
 | [`src/face2_monitor.py`](src/face2_monitor.py) | Compatibility shortcut for the API with `monitor` enabled |
 | [`src/ft_orientation.py`](src/ft_orientation.py) | Per-subject fine-tuning on Orientation data |
 | [`src/ft_train.py`](src/ft_train.py) | Base fatigue model training |
@@ -503,9 +503,16 @@ still require an on-device check.
 
 ## Updating an existing installation
 
-The robotic feedback implementation described above is currently in the updated
-source package/workspace; it has not yet been published in the GitHub `main`
-source files. Use the matching updated files when following the `reachy` commands.
+Monitor and robotic feedback are included in this repository's `main` branch.
+For an existing Git checkout, update the source and install the optional robot
+dependencies in your existing FACE environment:
+
+```bash
+git pull --ff-only origin main
+python -m pip install -r src/requirements-reachy.txt
+```
+
+For manual updates, copy the matching files together as described below.
 
 If the existing installation already includes the monitor and exact input-frame
 saving, copy these three files from the updated source package into `src/`:
