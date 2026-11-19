@@ -20,8 +20,17 @@ The trial randomizes participants to two arms, which the controller selects with
 
 ---
 
+## Demo (4× speed)
+
+[![FACE HMI demonstration at 4× speed](docs/media/FE-HMI-4x.gif)](https://github.com/ymliu17/FACE-HMI/raw/refs/heads/main/docs/media/FE-HMI-4x.mp4)
+
+Click the animated preview to watch the [full-resolution MP4](https://github.com/ymliu17/FACE-HMI/raw/refs/heads/main/docs/media/FE-HMI-4x.mp4).
+
+---
+
 ## Table of contents
 
+- [Demo (4× speed)](#demo-4-speed)
 - [Study](#study)
 - [How it works](#how-it-works)
 - [Adaptive decision logic](#adaptive-decision-logic)

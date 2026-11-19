@@ -14,3 +14,8 @@
 !README_Docker.txt
 !requirement.txt
 !RUN_FACE_API.bat
+# Public README demonstration assets
+!docs/
+!docs/media/
+!docs/media/FE-HMI-4x.mp4
+!docs/media/FE-HMI-4x.gif
